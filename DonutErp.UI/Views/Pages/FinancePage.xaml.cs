@@ -12,7 +12,7 @@ namespace DonutErp.UI.Views.Pages
         {
             this.InitializeComponent();
 
-            // Inject ViewModel dari Service Container
+            // Resolve ViewModel dari DI Container
             ViewModel = App.Current.Services.GetRequiredService<FinanceViewModel>();
         }
     }

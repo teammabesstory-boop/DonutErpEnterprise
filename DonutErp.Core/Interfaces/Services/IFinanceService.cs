@@ -5,21 +5,54 @@ using DonutErp.Core.Entities;
 
 namespace DonutErp.Core.Interfaces.Services
 {
-    // ==========================================
-    // 3. FINANCE SERVICE (AKUNTAN)
-    // ==========================================
+    // DTO (Data Transfer Object) untuk Laporan
+    public record ProfitLossReport(
+        decimal TotalRevenue,
+        decimal TotalCogs,
+        decimal GrossProfit,
+        decimal TotalOperationalExpense,
+        decimal TotalDepreciation,
+        decimal NetProfit,
+        List<ExpenseCategorySummary> ExpenseBreakdown
+    );
+
+    public record ExpenseCategorySummary(string Category, decimal Amount);
+
     public interface IFinanceService
     {
-        // Catat Penjualan (Otomatis potong stok produk jadi jika ada, atau sekadar catat uang masuk)
-        Task<Transaction> RecordSalesAsync(Transaction transaction);
+        // ==========================================
+        // 1. CASHFLOW & WALLET MANAGEMENT
+        // ==========================================
+        Task<List<Wallet>> GetWalletsAsync();
+        Task<Wallet?> GetWalletByIdAsync(Guid id);
+        Task CreateWalletAsync(Wallet wallet);
 
-        // Catat Pengeluaran Operasional (Listrik, Gaji, dll)
-        Task RecordExpenseAsync(string description, decimal amount, DateTime date);
+        // Fitur Transfer Antar Akun (Misal: Setor Tunai Kasir ke Bank)
+        // Harus Transactional (ACID)!
+        Task TransferFundsAsync(Guid sourceWalletId, Guid targetWalletId, decimal amount, string notes, string username);
 
-        // Dashboard Data: Profit & Loss Real-time
-        Task<(decimal TotalRevenue, decimal TotalCogs, decimal NetProfit)> GetProfitLossSummaryAsync(DateTime startDate, DateTime endDate);
+        // ==========================================
+        // 2. TRANSACTION RECORDING
+        // ==========================================
+        Task RecordIncomeAsync(Transaction transaction); // Penjualan
+        Task RecordExpenseAsync(string description, decimal amount, DateTime date, Guid walletId, string category, string username); // Pengeluaran
+        Task<List<Transaction>> GetRecentTransactionsAsync(int count);
 
-        // Dashboard Data: Top Selling Products
-        Task<List<(string ProductName, int QtySold)>> GetTopSellingProductsAsync(int topN);
+        // ==========================================
+        // 3. ASSET & DEPRECIATION ENGINE
+        // ==========================================
+        Task<List<Asset>> GetActiveAssetsAsync();
+        Task RegisterNewAssetAsync(Asset asset, Guid fundingWalletId, string username);
+
+        // Tombol "Tutup Buku Bulan Ini": Hitung penyusutan semua alat
+        Task RunMonthlyDepreciationAsync(DateTime period, string username);
+
+        // ==========================================
+        // 4. FINANCIAL REPORTING (THE LEDGER)
+        // ==========================================
+        Task<ProfitLossReport> GenerateProfitLossReportAsync(DateTime startDate, DateTime endDate);
+
+        // Analisa Top Produk (Revenue Driver)
+        Task<List<(string ProductName, int Qty, decimal Revenue)>> GetTopSellingProductsAsync(int topN);
     }
 }

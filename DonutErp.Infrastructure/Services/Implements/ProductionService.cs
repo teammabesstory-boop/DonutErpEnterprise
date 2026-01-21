@@ -1,8 +1,8 @@
 ﻿#nullable enable
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using DonutErp.Core.Entities;
 using DonutErp.Core.Interfaces.Services;
@@ -19,91 +19,235 @@ namespace DonutErp.Infrastructure.Services.Implements
             _context = context;
         }
 
-        // =================================================================
-        // 1. CREATE BATCH (MEMULAI PRODUKSI)
-        // =================================================================
-        // FIX: Ubah return type jadi Task<ProductionBatch>
-        public async Task<ProductionBatch> CreateProductionBatchAsync(ProductionBatch batch, List<ProductionOutput> outputs)
+        // ==========================================
+        // 1. BATCH LIFECYCLE MANAGEMENT
+        // ==========================================
+
+        public async Task<List<ProductionBatch>> GetActiveBatchesAsync()
+        {
+            return await _context.ProductionBatches
+                .Include(b => b.Outputs).ThenInclude(o => o.Product)
+                .Where(b => b.Status != BatchStatus.Finished && b.Status != BatchStatus.Failed)
+                .OrderByDescending(b => b.ProductionDate)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+
+        public async Task<ProductionBatch?> GetBatchByIdAsync(Guid id)
+        {
+            return await _context.ProductionBatches
+                .Include(b => b.Outputs).ThenInclude(o => o.Product)
+                .FirstOrDefaultAsync(b => b.Id == id);
+        }
+
+        public async Task<ProductionBatch> CreatePlannedBatchAsync(string batchCode, string? notes)
+        {
+            var batch = new ProductionBatch
+            {
+                Id = Guid.NewGuid(),
+                BatchCode = batchCode,
+                ProductionDate = DateTime.Now,
+                Status = BatchStatus.Planned,
+                Notes = notes,
+                OilLevelStartLiter = 0,
+                OilLevelEndLiter = 0,
+                OilAddedLiter = 0,
+                OilConsumedLiters = 0
+            };
+
+            await _context.ProductionBatches.AddAsync(batch);
+            await _context.SaveChangesAsync();
+            return batch;
+        }
+
+        public async Task StartBatchAsync(Guid batchId, double oilStartLevelLiter)
+        {
+            var batch = await _context.ProductionBatches.FindAsync(batchId);
+            if (batch == null) throw new Exception("Batch not found");
+            if (batch.Status != BatchStatus.Planned) throw new Exception("Batch already started or finished.");
+
+            batch.Status = BatchStatus.InProgress;
+            batch.OilLevelStartLiter = oilStartLevelLiter;
+            batch.ProductionDate = DateTime.Now; // Update timestamp to actual start
+
+            _context.ProductionBatches.Update(batch);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task RefillOilAsync(Guid batchId, double litersAdded)
+        {
+            var batch = await _context.ProductionBatches.FindAsync(batchId);
+            if (batch == null) throw new Exception("Batch not found");
+
+            batch.OilAddedLiter += litersAdded;
+
+            // Catat history kecil (optional, bisa lewat audit log)
+            // Disini kita langsung update state aja
+            _context.ProductionBatches.Update(batch);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task AddOutputAsync(Guid batchId, Guid productId, int qtyGood, int qtyReject)
+        {
+            var batch = await _context.ProductionBatches.FindAsync(batchId);
+            if (batch == null) throw new Exception("Batch not found");
+
+            var output = new ProductionOutput
+            {
+                Id = Guid.NewGuid(),
+                ProductionBatchId = batchId,
+                ProductId = productId,
+                QuantityGood = qtyGood,
+                QuantityReject = qtyReject,
+                ActualHppPerUnit = 0 // Belum dihitung
+            };
+
+            await _context.ProductionOutputs.AddAsync(output);
+            await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// THE CORE LOGIC: Finalisasi Produksi & Hitung HPP
+        /// Melakukan:
+        /// 1. Hitung konsumsi minyak
+        /// 2. Potong stok bahan baku (Backflushing)
+        /// 3. Potong stok minyak
+        /// 4. Hitung biaya Variable (Labor + Utilities)
+        /// 5. Update ActualHppPerUnit setiap produk
+        /// </summary>
+        public async Task<ProductionBatch> CompleteBatchAsync(Guid batchId, double oilEndLevelLiter, decimal laborCost, decimal utilitiesCost, string username)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // A. Simpan Header Batch
-                if (batch.Id == Guid.Empty) batch.Id = Guid.NewGuid();
+                // 1. Load Data Batch Lengkap
+                var batch = await _context.ProductionBatches
+                    .Include(b => b.Outputs)
+                    .FirstOrDefaultAsync(b => b.Id == batchId);
 
-                // Hitung pemakaian minyak real
-                double oilConsumed = (batch.OilLevelStartLiter + batch.OilAddedLiter) - batch.OilLevelEndLiter;
-                if (oilConsumed < 0) oilConsumed = 0;
-                batch.OilConsumedLiters = oilConsumed;
+                if (batch == null) throw new Exception("Batch not found");
+                if (batch.Status == BatchStatus.Finished) throw new Exception("Batch already finished.");
 
-                // Hitung Cost Minyak
+                // 2. Finalisasi Minyak & Overhead
+                batch.OilLevelEndLiter = oilEndLevelLiter;
+                batch.OilConsumedLiters = (batch.OilLevelStartLiter + batch.OilAddedLiter) - oilEndLevelLiter;
+                if (batch.OilConsumedLiters < 0) batch.OilConsumedLiters = 0; // Guard clause
+
+                batch.LaborCost = laborCost;
+                batch.UtilitiesCost = utilitiesCost;
+                batch.Status = BatchStatus.Finished;
+
+                // 3. Hitung Cost Minyak Real
                 var oilIngredient = await _context.Ingredients.FirstOrDefaultAsync(i => i.IsFryingOil);
-                decimal oilPricePerLiter = 0;
+                decimal totalOilCost = 0;
 
-                if (oilIngredient != null)
+                if (oilIngredient != null && batch.OilConsumedLiters > 0)
                 {
-                    double qtyToDeduct = oilConsumed * 1000; // Liter ke Gram/Ml
+                    // Konversi Liter ke UsageUnit (misal: Liter -> Ml/Gram)
+                    // Asumsi UsageUnit minyak adalah "Mililiter" atau "Gram" dengan rasio ~1000 per liter
+                    // Logic konversi sederhana: 
+                    double usageAmount = batch.OilConsumedLiters * 1000; // Liter ke ML
 
-                    // Potong Stok Minyak
-                    oilIngredient.CurrentStock -= qtyToDeduct;
+                    // Potong Stok
+                    oilIngredient.CurrentStock -= usageAmount;
+
+                    // Hitung Cost: QtyPakai * HargaRata2
+                    totalOilCost = (decimal)usageAmount * oilIngredient.AvgCostPerUsageUnit;
+
                     _context.Ingredients.Update(oilIngredient);
-
-                    // Hitung Biaya
-                    oilPricePerLiter = oilIngredient.AvgCostPerUsageUnit * 1000;
                 }
+                batch.CalculatedOilCost = totalOilCost;
 
-                batch.CalculatedOilCost = (decimal)oilConsumed * oilPricePerLiter;
+                // 4. Backflushing Bahan Baku & Costing per Produk
+                decimal totalMaterialCostBatch = 0;
+                int totalGoodUnitsBatch = batch.Outputs.Sum(o => o.QuantityGood);
 
-                // B. Simpan Outputs & Potong Stok Bahan Baku
-                decimal totalMaterialCost = 0;
-
-                foreach (var output in outputs)
+                foreach (var output in batch.Outputs)
                 {
-                    output.Id = Guid.NewGuid();
-                    output.ProductionBatchId = batch.Id;
-
+                    // Ambil Resep Produk ini
                     var recipes = await _context.Recipes
-                        .Where(r => r.ProductId == output.ProductId)
+                        .Include(r => r.Ingredient)
+                        .Include(r => r.SubProduct) // Support Multi-level, though we usually flatten it before prod
+                        .Where(r => r.ParentProductId == output.ProductId)
                         .ToListAsync();
 
-                    decimal productHppBase = 0;
+                    decimal productMaterialCostPerUnit = 0;
 
                     foreach (var r in recipes)
                     {
-                        var ingredient = await _context.Ingredients.FindAsync(r.IngredientId);
-                        if (ingredient != null)
+                        // Logic Bahan Baku
+                        if (r.Ingredient != null)
                         {
-                            // Potong Stok Bahan Baku
+                            // Hitung Total Kebutuhan (Good + Reject)
+                            // Reject tetap memakan bahan baku!
                             double totalQtyNeeded = r.Quantity * (output.QuantityGood + output.QuantityReject);
-                            ingredient.CurrentStock -= totalQtyNeeded;
-                            _context.Ingredients.Update(ingredient);
 
-                            // Hitung Cost Bahan
-                            productHppBase += ((decimal)r.Quantity * ingredient.AvgCostPerUsageUnit);
+                            // Masukkan faktor waste shrinkage resep (misal kulit telur)
+                            if (r.WastePercentage > 0)
+                            {
+                                totalQtyNeeded = totalQtyNeeded / (1 - (r.WastePercentage / 100.0));
+                            }
+
+                            // Potong Stok
+                            r.Ingredient.CurrentStock -= totalQtyNeeded;
+                            _context.Ingredients.Update(r.Ingredient);
+
+                            // Hitung Cost
+                            productMaterialCostPerUnit += ((decimal)r.Quantity * r.Ingredient.AvgCostPerUsageUnit);
+                            // Note: Cost dihitung berdasarkan resep standar per unit, 
+                            // waste reject nanti akan menaikkan HPP Good Unit secara total batch.
                         }
                     }
 
-                    totalMaterialCost += (productHppBase * (output.QuantityGood + output.QuantityReject));
+                    // Total Material Cost untuk Output ini
+                    decimal totalMatCostForOutput = productMaterialCostPerUnit * (output.QuantityGood + output.QuantityReject);
+                    totalMaterialCostBatch += totalMatCostForOutput;
 
-                    // Update HPP Final
-                    decimal allocatedOilCost = (output.QuantityGood > 0)
-                        ? (batch.CalculatedOilCost / outputs.Sum(o => o.QuantityGood))
-                        : 0;
+                    // 5. Alokasi Overhead (Oil + Labor + Utils) ke Produk ini
+                    // Metode: Alokasi berdasarkan QUANTITY. (Bisa juga berdasarkan Berat/Waktu, tapi Qty paling umum).
+                    // Rumus: (TotalOverhead / TotalGoodUnitsBatch)
 
-                    output.FinalHppPerUnit = productHppBase + allocatedOilCost;
+                    decimal totalOverheadBatch = totalOilCost + laborCost + utilitiesCost;
 
-                    await _context.ProductionOutputs.AddAsync(output);
+                    decimal overheadPerUnit = 0;
+                    if (totalGoodUnitsBatch > 0)
+                    {
+                        overheadPerUnit = totalOverheadBatch / totalGoodUnitsBatch;
+                    }
+
+                    // 6. Hitung Actual HPP Per Unit (Good Units menyerap cost Reject)
+                    // Rumus: (TotalMaterialUsed + AllocatedOverhead) / QuantityGood
+                    // Jika QuantityGood 0 (Gagal Total), Cost jadi Infinite/Loss.
+
+                    if (output.QuantityGood > 0)
+                    {
+                        // Cost Material Total (termasuk yang kebuang di reject) dibagi ke Good Units
+                        decimal realMaterialCostPerGoodUnit = totalMatCostForOutput / output.QuantityGood;
+
+                        output.ActualHppPerUnit = realMaterialCostPerGoodUnit + overheadPerUnit;
+                    }
+                    else
+                    {
+                        output.ActualHppPerUnit = 0; // Failed batch
+                    }
                 }
 
-                // C. Finalisasi Header
-                batch.TotalBatchCost = totalMaterialCost + batch.CalculatedOilCost;
+                batch.TotalBatchCost = totalMaterialCostBatch + totalOilCost + laborCost + utilitiesCost;
 
-                await _context.ProductionBatches.AddAsync(batch);
+                // Audit Log
+                await _context.AuditLogs.AddAsync(new AuditLog
+                {
+                    Action = "PRODUCTION_FINISH",
+                    EntityName = "ProductionBatch",
+                    RecordId = batch.Id.ToString(),
+                    Username = username,
+                    ChangesJson = $"Cost: {batch.TotalBatchCost:C2}, Oil: {batch.OilConsumedLiters}L",
+                    Timestamp = DateTime.Now
+                });
+
                 await _context.SaveChangesAsync();
-
                 await transaction.CommitAsync();
 
-                // FIX: Wajib return object batch
                 return batch;
             }
             catch
@@ -113,54 +257,46 @@ namespace DonutErp.Infrastructure.Services.Implements
             }
         }
 
-        // =================================================================
-        // 2. GET RECENT BATCHES
-        // =================================================================
-        public async Task<List<ProductionBatch>> GetRecentBatchesAsync()
+        // ==========================================
+        // 2. ANALYTICS & REPORTING
+        // ==========================================
+
+        public async Task<List<ProductionBatch>> GetBatchHistoryAsync(DateTime from, DateTime to)
         {
             return await _context.ProductionBatches
-                .Include(b => b.Outputs)
-                .ThenInclude(o => o.Product)
+                .Include(b => b.Outputs).ThenInclude(o => o.Product)
+                .Where(b => b.ProductionDate >= from && b.ProductionDate <= to && b.Status == BatchStatus.Finished)
                 .OrderByDescending(b => b.ProductionDate)
-                .Take(20)
                 .AsNoTracking()
                 .ToListAsync();
         }
 
-        // =================================================================
-        // 3. CALCULATE THEORETICAL HPP
-        // =================================================================
-        public async Task<decimal> CalculateTheoreticalHppAsync(Guid productId)
+        public async Task<decimal> CompareTheoreticalVsActualCostAsync(Guid batchId)
         {
-            var recipes = await _context.Recipes
-                .Include(r => r.Ingredient)
-                .Where(r => r.ProductId == productId)
-                .ToListAsync();
+            // Fitur Analytics: Bandingkan HPP System vs Realisasi
+            // Berguna untuk mendeteksi inefisiensi/pencurian
 
-            decimal hpp = 0;
-            foreach (var r in recipes)
+            var batch = await _context.ProductionBatches
+                .Include(b => b.Outputs)
+                .FirstOrDefaultAsync(b => b.Id == batchId);
+
+            if (batch == null) return 0;
+
+            decimal theoreticalTotal = 0;
+
+            foreach (var output in batch.Outputs)
             {
-                if (r.Ingredient != null)
+                // Ambil cached HPP standard
+                var product = await _context.Products.FindAsync(output.ProductId);
+                if (product != null)
                 {
-                    hpp += (decimal)r.Quantity * r.Ingredient.AvgCostPerUsageUnit;
+                    theoreticalTotal += (product.CachedHpp * output.QuantityGood);
                 }
             }
-            return hpp;
-        }
 
-        // =================================================================
-        // 4. CALCULATE OIL LOSS COST
-        // =================================================================
-        // FIX: Ubah return type jadi Task<decimal>
-        public Task<decimal> CalculateOilLossCost(double startLevel, double endLevel, double added, decimal oilPricePerLiter)
-        {
-            double consumed = (startLevel + added) - endLevel;
-            if (consumed < 0) consumed = 0;
-
-            decimal cost = (decimal)consumed * oilPricePerLiter;
-
-            // Bungkus hasil synchronous ke dalam Task agar sesuai Interface
-            return Task.FromResult(cost);
+            // Return Variance (Selisih)
+            // Positif = Boros (Actual > Theory), Negatif = Hemat
+            return batch.TotalBatchCost - theoreticalTotal;
         }
     }
 }

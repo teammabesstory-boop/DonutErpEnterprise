@@ -19,33 +19,19 @@ namespace DonutErp.UI.ViewModels.POS
         private readonly IFinanceService _financeService;
         private readonly AppDbContext _context;
 
-        // ==========================================
-        // STATE: KATALOG PRODUK
-        // ==========================================
         [ObservableProperty]
         private ObservableCollection<Product> _products = new();
 
-        [ObservableProperty]
-        private Product? _selectedProduct;
-
-        // ==========================================
-        // STATE: KERANJANG BELANJA
-        // ==========================================
         [ObservableProperty]
         private ObservableCollection<TransactionDetail> _cartItems = new();
 
         [ObservableProperty]
         private decimal _grandTotal;
 
-        // ==========================================
-        // STATE: PEMBAYARAN
-        // ==========================================
-        // FIX: Ubah jadi double agar kompatibel dengan NumberBox UI
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(ChangeAmount))]
         private double _paymentAmount;
 
-        // Logic Kembalian: Cast PaymentAmount ke decimal dulu
         public decimal ChangeAmount => (decimal)PaymentAmount > GrandTotal ? (decimal)PaymentAmount - GrandTotal : 0;
 
         [ObservableProperty]
@@ -98,7 +84,6 @@ namespace DonutErp.UI.ViewModels.POS
                 };
                 CartItems.Add(newItem);
             }
-
             RecalculateTotal();
         }
 
@@ -131,7 +116,6 @@ namespace DonutErp.UI.ViewModels.POS
         {
             if (CartItems.Count == 0) return;
 
-            // FIX: Cast PaymentAmount ke decimal untuk validasi
             if ((decimal)PaymentAmount < GrandTotal)
             {
                 await ShowDialog("Pembayaran Kurang", "Uang yang dibayarkan kurang dari total belanja.");
@@ -146,12 +130,17 @@ namespace DonutErp.UI.ViewModels.POS
                     Id = Guid.NewGuid(),
                     InvoiceNumber = $"POS-{DateTime.Now:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 4).ToUpper()}",
                     Date = DateTime.Now,
+                    Type = TransactionType.SalesIncome, // Set Type
                     PaymentMethod = "CASH",
                     TotalAmount = GrandTotal,
+                    // Total Cost (HPP) dihitung dari sum item
+                    TotalCost = CartItems.Sum(x => x.CostAtSale * x.Quantity),
                     Details = CartItems.ToList()
                 };
 
-                await _financeService.RecordSalesAsync(transaction);
+                // FIX CS1061: Pakai RecordIncomeAsync
+                await _financeService.RecordIncomeAsync(transaction);
+
                 await ShowDialog("Transaksi Berhasil", $"Kembalian: Rp {ChangeAmount:N0}");
                 ClearCart();
             }

@@ -4,142 +4,283 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:viewmodels="using:DonutErp.UI.ViewModels.Finance"
+    xmlns:models="using:DonutErp.Core.Entities"
+    xmlns:vm="using:DonutErp.UI.ViewModels.Finance"
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-    <Grid Padding="24">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+	<ScrollViewer VerticalScrollBarVisibility="Auto">
+		<Grid Padding="24" RowSpacing="24">
+			<Grid.RowDefinitions>
+				<RowDefinition Height="Auto"/>
+				<RowDefinition Height="Auto"/>
+				<RowDefinition Height="Auto"/>
+				<RowDefinition Height="*"/>
+			</Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Margin="0,0,0,24">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
+			<Grid Grid.Row="0">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
 
-            <StackPanel>
-                <TextBlock Text="Laporan Keuangan" Style="{StaticResource TitleTextBlockStyle}"/>
-                <TextBlock Text="Analisa profitabilitas dan arus kas real-time." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-            </StackPanel>
+				<StackPanel>
+					<TextBlock Text="Financial Dashboard" Style="{StaticResource TitleTextBlockStyle}"/>
+					<TextBlock Text="Real-time Profit &amp; Loss Analysis" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+				</StackPanel>
 
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Bottom">
-                <DatePicker Header="Dari Tanggal" Date="{x:Bind ViewModel.StartDate, Mode=TwoWay}"/>
-                <DatePicker Header="Sampai Tanggal" Date="{x:Bind ViewModel.EndDate, Mode=TwoWay}"/>
+				<StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12">
+					<CalendarDatePicker Header="Dari Tanggal" Date="{x:Bind ViewModel.StartDate, Mode=TwoWay}"/>
+					<CalendarDatePicker Header="Sampai Tanggal" Date="{x:Bind ViewModel.EndDate, Mode=TwoWay}"/>
 
-                <Button Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Bottom" Command="{x:Bind ViewModel.LoadDashboardDataCommand}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE72C;"/>
-                        <TextBlock Text="Terapkan Filter"/>
-                    </StackPanel>
-                </Button>
-            </StackPanel>
-        </Grid>
+					<Button Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Bottom"
+                            Command="{x:Bind ViewModel.LoadDashboardCommand}">
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<FontIcon Glyph="&#xE72C;"/>
+							<TextBlock Text="Refresh Data"/>
+						</StackPanel>
+					</Button>
+				</StackPanel>
+			</Grid>
 
-        <Grid Grid.Row="1" ColumnSpacing="16" Margin="0,0,0,24">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1*"/>
-                <ColumnDefinition Width="1*"/>
-                <ColumnDefinition Width="1*"/>
-            </Grid.ColumnDefinitions>
+			<Grid Grid.Row="1" ColumnSpacing="16">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="*"/>
+				</Grid.ColumnDefinitions>
 
-            <Grid Grid.Column="0" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                <StackPanel>
-                    <TextBlock Text="Total Pendapatan (Revenue)" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    <TextBlock Text="{x:Bind ViewModel.TotalRevenue, Mode=OneWay, Converter={StaticResource CurrencyConverter}}" 
-                               Style="{StaticResource TitleTextBlockStyle}" Foreground="{ThemeResource SystemAccentColor}"/>
-                </StackPanel>
-            </Grid>
+				<Grid Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8" Padding="16" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+					<StackPanel Spacing="4">
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<FontIcon Glyph="&#xE809;" Foreground="{ThemeResource SystemAccentColor}"/>
+							<TextBlock Text="Total Revenue" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+						</StackPanel>
+						<TextBlock Text="{x:Bind ViewModel.TotalRevenue, Mode=OneWay, Converter={StaticResource CurrencyConverter}}"
+                                   Style="{StaticResource SubtitleTextBlockStyle}" FontSize="24" FontWeight="Bold"/>
+					</StackPanel>
+				</Grid>
 
-            <Grid Grid.Column="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                <StackPanel>
-                    <TextBlock Text="Harga Pokok Penjualan (HPP)" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    <TextBlock Text="{x:Bind ViewModel.TotalCogs, Mode=OneWay, Converter={StaticResource CurrencyConverter}}" 
-                               Style="{StaticResource TitleTextBlockStyle}" Foreground="Orange"/>
-                </StackPanel>
-            </Grid>
+				<Grid Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8" Padding="16" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+					<StackPanel Spacing="4">
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<FontIcon Glyph="&#xE74C;" Foreground="OrangeRed"/>
+							<TextBlock Text="Cost of Goods (HPP)" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+						</StackPanel>
+						<TextBlock Text="{x:Bind ViewModel.TotalCogs, Mode=OneWay, Converter={StaticResource CurrencyConverter}}"
+                                   Style="{StaticResource SubtitleTextBlockStyle}" FontSize="24" FontWeight="Bold"/>
+					</StackPanel>
+				</Grid>
 
-            <Grid Grid.Column="2" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                <StackPanel>
-                    <TextBlock Text="Laba Bersih (Net Profit)" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    <TextBlock Text="{x:Bind ViewModel.NetProfit, Mode=OneWay, Converter={StaticResource CurrencyConverter}}" 
-                               Style="{StaticResource TitleTextBlockStyle}" FontWeight="Bold" Foreground="Green"/>
-                </StackPanel>
-            </Grid>
-        </Grid>
+				<Grid Grid.Column="2" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8" Padding="16" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+					<StackPanel Spacing="4">
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<FontIcon Glyph="&#xE90C;" Foreground="DarkGoldenrod"/>
+							<TextBlock Text="Operational Exp" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+						</StackPanel>
+						<TextBlock Text="{x:Bind ViewModel.TotalOpex, Mode=OneWay, Converter={StaticResource CurrencyConverter}}"
+                                   Style="{StaticResource SubtitleTextBlockStyle}" FontSize="24" FontWeight="Bold"/>
+					</StackPanel>
+				</Grid>
 
-        <Grid Grid.Row="2" ColumnSpacing="24">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1.5*"/>
-                <ColumnDefinition Width="1*"/>
-            </Grid.ColumnDefinitions>
+				<Grid Grid.Column="3" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8" Padding="16" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+					<StackPanel Spacing="4">
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<FontIcon Glyph="&#xE8D4;" Foreground="Green"/>
+							<TextBlock Text="Net Profit (Bersih)" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+						</StackPanel>
+						<TextBlock Text="{x:Bind ViewModel.NetProfit, Mode=OneWay, Converter={StaticResource CurrencyConverter}}"
+                                   Style="{StaticResource SubtitleTextBlockStyle}" FontSize="24" FontWeight="Bold" Foreground="Green"/>
+						<TextBlock Text="{x:Bind ViewModel.NetProfitMargin, Mode=OneWay, Converter={StaticResource StringFormatConverter}, ConverterParameter='Margin: {0:N1}%'}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"/>
+					</StackPanel>
+				</Grid>
+			</Grid>
 
-            <Grid Grid.Column="0" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+			<Grid Grid.Row="2" Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="8" Padding="16">
+				<Grid.RowDefinitions>
+					<RowDefinition Height="Auto"/>
+					<RowDefinition Height="Auto"/>
+				</Grid.RowDefinitions>
 
-                <TextBlock Text="Produk Terlaris (Top 5)" Grid.Row="0" Margin="16" FontWeight="SemiBold"/>
+				<Grid Margin="0,0,0,12">
+					<TextBlock Text="Active Wallets &amp; Bank Accounts" Style="{StaticResource SubtitleTextBlockStyle}"/>
+					<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+						<TextBlock Text="Total Liquidity:" VerticalAlignment="Center"/>
+						<TextBlock Text="{x:Bind ViewModel.TotalLiquidity, Mode=OneWay, Converter={StaticResource CurrencyConverter}}" FontWeight="Bold" Foreground="{ThemeResource SystemAccentColor}"/>
+					</StackPanel>
+				</Grid>
 
-                <ListView Grid.Row="1" ItemsSource="{x:Bind ViewModel.TopProducts, Mode=OneWay}" SelectionMode="None">
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="viewmodels:TopProductDisplay">
-                            <Grid Padding="0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
+				<GridView Grid.Row="1" ItemsSource="{x:Bind ViewModel.Wallets, Mode=OneWay}" SelectionMode="None">
+					<GridView.ItemTemplate>
+						<DataTemplate x:DataType="models:Wallet">
+							<Grid Width="220" Height="100" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8" Padding="16" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+								<Grid.RowDefinitions>
+									<RowDefinition Height="*"/>
+									<RowDefinition Height="Auto"/>
+									<RowDefinition Height="Auto"/>
+								</Grid.RowDefinitions>
 
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Name}" FontWeight="Medium"/>
-                                </StackPanel>
+								<Grid>
+									<TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+									<FontIcon Glyph="&#xE8C7;" HorizontalAlignment="Right" VerticalAlignment="Top" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+								</Grid>
 
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                                    <TextBlock Text="{x:Bind Qty}" FontWeight="Bold"/>
-                                    <TextBlock Text="sold" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                </StackPanel>
-                            </Grid>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
+								<TextBlock Grid.Row="1" Text="{x:Bind AccountNumber}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,0,0,4"/>
 
-                <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8"
-                            Visibility="{x:Bind ViewModel.TopProducts.Count, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Invert, Mode=OneWay}">
-                    <TextBlock Text="Belum ada data penjualan" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
-            </Grid>
+								<TextBlock Grid.Row="2" Text="{x:Bind CurrentBalance, Converter={StaticResource CurrencyConverter}}"
+                                           Style="{StaticResource SubtitleTextBlockStyle}" FontWeight="Bold"/>
+							</Grid>
+						</DataTemplate>
+					</GridView.ItemTemplate>
+					<GridView.ItemsPanel>
+						<ItemsPanelTemplate>
+							<ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="1"/>
+						</ItemsPanelTemplate>
+					</GridView.ItemsPanel>
+				</GridView>
+			</Grid>
 
-            <Grid Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8" Padding="16" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+			<Grid Grid.Row="3" ColumnSpacing="24">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="400"/>
+					<ColumnDefinition Width="*"/>
+				</Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,16">
-                    <TextBlock Text="Catat Pengeluaran Cepat" FontWeight="SemiBold"/>
-                    <TextBlock Text="Listrik, Gaji, Gas, Plastik, dll." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                </StackPanel>
+				<Pivot>
+					<PivotItem Header="Catat Pengeluaran">
+						<StackPanel Spacing="16" Padding="0,12" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8">
+							<TextBox Header="Keterangan Biaya" PlaceholderText="Contoh: Bayar Listrik PLN"
+                                     Text="{x:Bind ViewModel.ExpenseDesc, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
-                <StackPanel Grid.Row="1" Spacing="12">
-                    <TextBox Header="Keterangan" PlaceholderText="Contoh: Beli Gas 3kg" 
-                             Text="{x:Bind ViewModel.ExpenseDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+							<NumberBox Header="Nominal (Rp)" PlaceholderText="0" Minimum="0"
+                                       Value="{x:Bind ViewModel.ExpenseAmt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
-                    <NumberBox Header="Jumlah (Rp)" PlaceholderText="0" Minimum="0"
-                               Value="{x:Bind ViewModel.ExpenseAmount, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                </StackPanel>
+							<ComboBox Header="Sumber Dana" HorizontalAlignment="Stretch"
+                                      ItemsSource="{x:Bind ViewModel.Wallets, Mode=OneWay}"
+                                      SelectedItem="{x:Bind ViewModel.SelectedExpenseWallet, Mode=TwoWay}">
+								<ComboBox.ItemTemplate>
+									<DataTemplate x:DataType="models:Wallet">
+										<TextBlock Text="{x:Bind Name}"/>
+									</DataTemplate>
+								</ComboBox.ItemTemplate>
+							</ComboBox>
 
-                <Button Grid.Row="2" Content="Simpan Pengeluaran" HorizontalAlignment="Stretch" Margin="0,16,0,0"
-                        Command="{x:Bind ViewModel.SubmitExpenseCommand}"/>
-            </Grid>
-        </Grid>
+							<ComboBox Header="Kategori" HorizontalAlignment="Stretch" SelectedItem="{x:Bind ViewModel.ExpenseCategory, Mode=TwoWay}">
+								<x:String>Operasional</x:String>
+								<x:String>Gaji Karyawan</x:String>
+								<x:String>Maintenance</x:String>
+								<x:String>Marketing</x:String>
+								<x:String>Pajak</x:String>
+								<x:String>Lainnya</x:String>
+							</ComboBox>
 
-        <Grid Grid.RowSpan="3" Background="#80000000" Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}">
-            <ProgressRing IsActive="True" Width="60" Height="60"/>
-        </Grid>
-    </Grid>
+							<Button Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch" Margin="0,12,0,0"
+                                    Command="{x:Bind ViewModel.SubmitExpenseCommand}">
+								<StackPanel Orientation="Horizontal" Spacing="8">
+									<FontIcon Glyph="&#xE74D;"/>
+									<TextBlock Text="SIMPAN PENGELUARAN"/>
+								</StackPanel>
+							</Button>
+						</StackPanel>
+					</PivotItem>
+
+					<PivotItem Header="Pindah Buku (Transfer)">
+						<StackPanel Spacing="16" Padding="0,12" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8">
+							<InfoBar Severity="Informational" IsOpen="True" IsClosable="False"
+                                     Message="Pindahkan dana antar kas/bank secara aman."/>
+
+							<Grid ColumnSpacing="8">
+								<Grid.ColumnDefinitions>
+									<ColumnDefinition Width="*"/>
+									<ColumnDefinition Width="Auto"/>
+									<ColumnDefinition Width="*"/>
+								</Grid.ColumnDefinitions>
+
+								<ComboBox Grid.Column="0" Header="Dari" HorizontalAlignment="Stretch"
+                                          ItemsSource="{x:Bind ViewModel.Wallets, Mode=OneWay}"
+                                          SelectedItem="{x:Bind ViewModel.SourceWallet, Mode=TwoWay}">
+									<ComboBox.ItemTemplate>
+										<DataTemplate x:DataType="models:Wallet">
+											<TextBlock Text="{x:Bind Name}"/>
+										</DataTemplate>
+									</ComboBox.ItemTemplate>
+								</ComboBox>
+
+								<FontIcon Grid.Column="1" Glyph="&#xE72A;" VerticalAlignment="Bottom" Margin="0,0,0,12"/>
+
+								<ComboBox Grid.Column="2" Header="Ke" HorizontalAlignment="Stretch"
+                                          ItemsSource="{x:Bind ViewModel.Wallets, Mode=OneWay}"
+                                          SelectedItem="{x:Bind ViewModel.TargetWallet, Mode=TwoWay}">
+									<ComboBox.ItemTemplate>
+										<DataTemplate x:DataType="models:Wallet">
+											<TextBlock Text="{x:Bind Name}"/>
+										</DataTemplate>
+									</ComboBox.ItemTemplate>
+								</ComboBox>
+							</Grid>
+
+							<NumberBox Header="Nominal Transfer (Rp)" PlaceholderText="0" Minimum="0"
+                                       Value="{x:Bind ViewModel.TransferAmt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+							<TextBox Header="Catatan Transfer" PlaceholderText="Opsional..."
+                                     Text="{x:Bind ViewModel.TransferNotes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+							<Button HorizontalAlignment="Stretch" Margin="0,12,0,0"
+                                    Command="{x:Bind ViewModel.ProcessTransferCommand}">
+								<StackPanel Orientation="Horizontal" Spacing="8">
+									<FontIcon Glyph="&#xE825;"/>
+									<TextBlock Text="PROSES TRANSFER"/>
+								</StackPanel>
+							</Button>
+						</StackPanel>
+					</PivotItem>
+				</Pivot>
+
+				<Grid Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8" BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+					<Grid.RowDefinitions>
+						<RowDefinition Height="Auto"/>
+						<RowDefinition Height="*"/>
+					</Grid.RowDefinitions>
+
+					<Grid Padding="16" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+						<TextBlock Text="Recent Transactions (Audit Trail)" Style="{StaticResource SubtitleTextBlockStyle}"/>
+						<FontIcon Glyph="&#xE81C;" HorizontalAlignment="Right"/>
+					</Grid>
+
+					<ListView Grid.Row="1" ItemsSource="{x:Bind ViewModel.RecentTransactions, Mode=OneWay}" SelectionMode="None">
+						<ListView.ItemTemplate>
+							<DataTemplate x:DataType="models:Transaction">
+								<Grid Padding="0,12" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+									<Grid.ColumnDefinitions>
+										<ColumnDefinition Width="Auto"/>
+										<ColumnDefinition Width="*"/>
+										<ColumnDefinition Width="Auto"/>
+									</Grid.ColumnDefinitions>
+
+									<FontIcon Glyph="&#xE823;" FontSize="20" Margin="0,0,16,0" VerticalAlignment="Center"
+                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+									<StackPanel Grid.Column="1" Spacing="2">
+										<TextBlock Text="{x:Bind Description}" FontWeight="Medium"/>
+										<StackPanel Orientation="Horizontal" Spacing="8">
+											<TextBlock Text="{x:Bind InvoiceNumber}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+											<TextBlock Text="|" Style="{StaticResource CaptionTextBlockStyle}"/>
+											<TextBlock Text="{x:Bind Date}" Style="{StaticResource CaptionTextBlockStyle}"/>
+											<TextBlock Text="|" Style="{StaticResource CaptionTextBlockStyle}"/>
+											<TextBlock Text="{x:Bind Wallet.Name, TargetNullValue='No Wallet'}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource SystemAccentColor}"/>
+										</StackPanel>
+									</StackPanel>
+
+									<TextBlock Grid.Column="2" Text="{x:Bind TotalAmount, Converter={StaticResource CurrencyConverter}}"
+                                               VerticalAlignment="Center" FontWeight="Bold" HorizontalAlignment="Right"/>
+								</Grid>
+							</DataTemplate>
+						</ListView.ItemTemplate>
+					</ListView>
+				</Grid>
+			</Grid>
+		</Grid>
+	</ScrollViewer>
 </Page>

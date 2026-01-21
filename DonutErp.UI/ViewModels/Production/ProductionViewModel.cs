@@ -1,115 +1,72 @@
-﻿using System;
+﻿#nullable enable
+
+using System;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DonutErp.Core.Entities;
 using DonutErp.Core.Interfaces.Services;
-using Microsoft.UI.Xaml.Controls; // Untuk Dialog sederhana
-using DonutErp.Infrastructure.Data;
+using System.Linq;
 
 namespace DonutErp.UI.ViewModels.Production
 {
     public partial class ProductionViewModel : ObservableObject
     {
         private readonly IProductionService _productionService;
-        private readonly AppDbContext _context; // Kita butuh context untuk ambil list produk (shortcut)
 
-        // ==========================================
-        // STATE: BATCH HEADER (Data Minyak & Umum)
-        // ==========================================
+        // List Batch Aktif
         [ObservableProperty]
-        private string _batchCode;
+        private ObservableCollection<ProductionBatch> _activeBatches = new();
 
-        [ObservableProperty]
-        private DateTimeOffset _productionDate = DateTime.Now;
+        // Form New Plan
+        [ObservableProperty] private string _newBatchCode = $"BATCH-{DateTime.Now:yyyyMMdd}";
+        [ObservableProperty] private string _newBatchNotes = "";
 
-        [ObservableProperty]
-        private double _oilStartLevel;
+        // Form Execution - Oil Management
+        [ObservableProperty] private double _oilStartLevel;
+        [ObservableProperty] private double _oilAdded;
+        [ObservableProperty] private double _oilEndLevel;
 
-        [ObservableProperty]
-        private double _oilEndLevel;
+        // Form Execution - Batch Details
+        [ObservableProperty] private ProductionBatch? _selectedBatch;
+        [ObservableProperty] private string _batchCode = "";
+        [ObservableProperty] private DateTimeOffset _productionDate = DateTimeOffset.Now;
+        
+        // Form Execution - Batch Inputs
+        [ObservableProperty] private double _startOilLevel;
+        [ObservableProperty] private double _endOilLevel;
+        [ObservableProperty] private decimal _laborCostInput;
+        [ObservableProperty] private decimal _utilityCostInput;
 
-        [ObservableProperty]
-        private double _oilAdded;
-
-        // ==========================================
-        // STATE: ITEM INPUT (Form Tambah Donat)
-        // ==========================================
+        // Product Selection and Batch Output
         [ObservableProperty]
         private ObservableCollection<Product> _availableProducts = new();
 
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(AddToBatchCommand))]
-        private Product? _selectedProductToAdd;
+        [ObservableProperty] private Product? _selectedProductToAdd;
+        [ObservableProperty] private double _qtyGoodInput;
+        [ObservableProperty] private double _qtyRejectInput;
 
-        [ObservableProperty]
-        private int _qtyGoodInput;
-
-        [ObservableProperty]
-        private int _qtyRejectInput;
-
-        // ==========================================
-        // STATE: LIST BATCH (Keranjang Sementara)
-        // ==========================================
-        // Ini daftar donat yang mau diproses dalam batch ini
+        // Batch Outputs
         [ObservableProperty]
         private ObservableCollection<ProductionOutput> _batchOutputs = new();
 
-        [ObservableProperty]
-        private bool _isBusy;
+        [ObservableProperty] private bool _isBusy;
 
-        // ==========================================
-        // CONSTRUCTOR
-        // ==========================================
-        public ProductionViewModel(IProductionService productionService, AppDbContext context)
+        public ProductionViewModel(IProductionService productionService)
         {
             _productionService = productionService;
-            _context = context;
-
-            // Auto-Generate Batch Code (Format: PRD-YYYYMMDD-Random)
-            GenerateNewBatchCode();
-
-            // Load Data Produk Master
-            _ = LoadMasterDataAsync();
-        }
-
-        private void GenerateNewBatchCode()
-        {
-            BatchCode = $"PRD-{DateTime.Now:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 4).ToUpper()}";
-        }
-
-        // ==========================================
-        // LOGIC
-        // ==========================================
-
-        [RelayCommand]
-        public async Task LoadMasterDataAsync()
-        {
-            // Ambil semua produk yang tipenya bukan 'RawMaterial'
-            // Kita pakai _context langsung untuk read-only data biar cepat (Idealnya via Service terpisah)
-            var products = _context.Products
-                .Where(p => p.Type != ProductType.RawMaterial)
-                .ToList();
-
-            AvailableProducts = new ObservableCollection<Product>(products);
+            _ = LoadDataAsync();
         }
 
         [RelayCommand]
-        public async Task CalculateTheoreticalHppAsync()
+        public async Task LoadDataAsync()
         {
-            if (SelectedProductToAdd == null) return;
-
             IsBusy = true;
             try
             {
-                // Hitung HPP di atas kertas untuk produk yang dipilih
-                decimal hpp = await _productionService.CalculateTheoreticalHppAsync(SelectedProductToAdd.Id);
-
-                // Tampilkan info (Nanti kita bind ke UI TextBlock atau Dialog)
-                // Untuk sekarang kita update property di object Product biar UI refresh
-                SelectedProductToAdd.CachedHpp = hpp;
+                var list = await _productionService.GetActiveBatchesAsync();
+                ActiveBatches = new ObservableCollection<ProductionBatch>(list);
             }
             finally
             {
@@ -117,91 +74,65 @@ namespace DonutErp.UI.ViewModels.Production
             }
         }
 
-        [RelayCommand(CanExecute = nameof(CanAddToBatch))]
-        public void AddToBatch()
-        {
-            if (SelectedProductToAdd == null) return;
-
-            // Buat object Output sementara (belum masuk DB)
-            var item = new ProductionOutput
-            {
-                ProductId = SelectedProductToAdd.Id,
-                Product = SelectedProductToAdd, // Reference object biar Nama tampil di Tabel
-                QuantityGood = QtyGoodInput,
-                QuantityReject = QtyRejectInput
-            };
-
-            BatchOutputs.Add(item);
-
-            // Reset Input form
-            QtyGoodInput = 0;
-            QtyRejectInput = 0;
-            SelectedProductToAdd = null;
-        }
-
-        private bool CanAddToBatch()
-        {
-            return SelectedProductToAdd != null && (QtyGoodInput > 0 || QtyRejectInput > 0);
-        }
-
-        [RelayCommand(CanExecute = nameof(CanSubmitBatch))]
-        public async Task SubmitBatchAsync()
+        [RelayCommand]
+        public async Task CreatePlanAsync()
         {
             IsBusy = true;
             try
             {
-                // 1. Siapkan Object Header Batch
-                var batch = new ProductionBatch
-                {
-                    Id = Guid.NewGuid(),
-                    BatchCode = BatchCode,
-                    ProductionDate = ProductionDate.DateTime,
-                    Status = BatchStatus.Finished, // Langsung selesai
+                // Manggil Method BARU: CreatePlannedBatchAsync
+                await _productionService.CreatePlannedBatchAsync(NewBatchCode, NewBatchNotes);
 
-                    // Data Minyak Goreng
-                    OilLevelStartLiter = OilStartLevel,
-                    OilLevelEndLiter = OilEndLevel,
-                    OilAddedLiter = OilAdded,
+                NewBatchCode = $"BATCH-{DateTime.Now:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 4)}";
+                NewBatchNotes = "";
 
-                    // Kosongkan dulu hasil kalkulasi (akan diisi oleh Service)
-                    OilConsumedLiters = 0,
-                    CalculatedOilCost = 0,
-                    TotalBatchCost = 0
-                };
+                await LoadDataAsync();
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
 
-                // 2. Panggil Service "God Mode"
-                // Service ini akan melakukan Backflush stok, hitung minyak, dan simpan DB.
-                var result = await _productionService.CreateProductionBatchAsync(batch, BatchOutputs.ToList());
+        [RelayCommand]
+        public async Task StartBatchAsync()
+        {
+            if (SelectedBatch == null) return;
+            IsBusy = true;
+            try
+            {
+                await _productionService.StartBatchAsync(SelectedBatch.Id, OilStartLevel);
+                await LoadDataAsync();
+            }
+            finally { IsBusy = false; }
+        }
 
-                // 3. Sukses! Reset UI.
-                ContentDialog successDialog = new ContentDialog
-                {
-                    Title = "Produksi Berhasil!",
-                    Content = $"Batch {result.BatchCode} tersimpan.\n" +
-                              $"Total Cost: Rp {result.TotalBatchCost:N0}\n" +
-                              $"Minyak Terpakai: {result.OilConsumedLiters:N2} Liter",
-                    CloseButtonText = "Ok",
-                    XamlRoot = App.Current.MainWindow.Content.XamlRoot // Wajib di WinUI 3
-                };
-                await successDialog.ShowAsync();
+        [RelayCommand]
+        public async Task FinishBatchAsync()
+        {
+            if (SelectedBatch == null) return;
+            IsBusy = true;
+            try
+            {
+                // Manggil Method BARU: CompleteBatchAsync
+                await _productionService.CompleteBatchAsync(
+                    SelectedBatch.Id,
+                    OilEndLevel,
+                    LaborCostInput,
+                    UtilityCostInput,
+                    "Admin");
 
-                // Bersihkan form untuk batch baru
-                BatchOutputs.Clear();
-                GenerateNewBatchCode();
-                OilStartLevel = OilEndLevel; // Level akhir batch ini jadi level awal batch besok
+                // Reset Inputs
                 OilEndLevel = 0;
-                OilAdded = 0;
+                LaborCostInput = 0;
+                UtilityCostInput = 0;
+                SelectedBatch = null;
+
+                await LoadDataAsync();
             }
             catch (Exception ex)
             {
-                ContentDialog errorDialog = new ContentDialog
-                {
-                    Title = "Gagal Memproses Batch",
-                    Content = ex.Message,
-                    CloseButtonText = "Tutup",
-                    XamlRoot = App.Current.MainWindow.Content.XamlRoot
-                };
-                await errorDialog.ShowAsync();
+                System.Diagnostics.Debug.WriteLine(ex.Message);
             }
             finally
             {
@@ -209,21 +140,44 @@ namespace DonutErp.UI.ViewModels.Production
             }
         }
 
-        private bool CanSubmitBatch()
+        [RelayCommand]
+        public void AddToBatch()
         {
-            // Tombol Process hanya aktif jika ada item di keranjang & data minyak masuk akal
-            return BatchOutputs.Count > 0 && OilStartLevel >= 0;
+            if (SelectedProductToAdd == null || QtyGoodInput <= 0) return;
+            
+            var batchOutput = new ProductionOutput
+            {
+                ProductId = SelectedProductToAdd.Id,
+                Product = SelectedProductToAdd,
+                QuantityGood = (int)QtyGoodInput,
+                QuantityReject = (int)QtyRejectInput
+            };
+
+            BatchOutputs.Add(batchOutput);
+            
+            // Reset inputs
+            SelectedProductToAdd = null;
+            QtyGoodInput = 0;
+            QtyRejectInput = 0;
         }
 
-        // Helper untuk hapus item dari keranjang
         [RelayCommand]
-        public void RemoveFromBatch(ProductionOutput item)
+        public async Task SubmitBatchAsync()
         {
-            if (BatchOutputs.Contains(item))
+            if (SelectedBatch == null || BatchOutputs.Count == 0) return;
+            
+            IsBusy = true;
+            try
             {
-                BatchOutputs.Remove(item);
+                // Implement batch submission logic
+                // This would typically save the batch outputs
+                await LoadDataAsync();
+                BatchOutputs.Clear();
             }
-            SubmitBatchCommand.NotifyCanExecuteChanged();
+            finally
+            {
+                IsBusy = false;
+            }
         }
     }
 }

@@ -7,17 +7,34 @@ namespace DonutErp.Core.Interfaces.Services
 {
     public interface IProductionService
     {
-        // Hitung HPP Teoritis (Async)
-        Task<decimal> CalculateTheoreticalHppAsync(Guid productId);
+        // ==========================================
+        // 1. BATCH LIFECYCLE MANAGEMENT
+        // ==========================================
+        Task<List<ProductionBatch>> GetActiveBatchesAsync();
+        Task<ProductionBatch?> GetBatchByIdAsync(Guid id);
 
-        // Proses Produksi (Async)
-        Task<ProductionBatch> CreateProductionBatchAsync(ProductionBatch batch, List<ProductionOutput> outputs);
+        // Step 1: Planning (Cuma niat bikin, belum potong stok)
+        Task<ProductionBatch> CreatePlannedBatchAsync(string batchCode, string? notes);
 
-        // History Batch (Async)
-        Task<List<ProductionBatch>> GetRecentBatchesAsync();
+        // Step 2: Start Production (Catat level minyak awal)
+        Task StartBatchAsync(Guid batchId, double oilStartLevelLiter);
 
-        // Hitung Susut Minyak (Async)
-        // PENTING: Pakai Task<decimal> biar cocok sama Service
-        Task<decimal> CalculateOilLossCost(double startLevel, double endLevel, double addedLiter, decimal pricePerLiter);
+        // Step 3: Add Oil (Refill di tengah jalan)
+        Task RefillOilAsync(Guid batchId, double litersAdded);
+
+        // Step 4: Record Output (QC Pass/Reject)
+        Task AddOutputAsync(Guid batchId, Guid productId, int qtyGood, int qtyReject);
+
+        // Step 5: Finish & Costing (The heavy calculation happens here)
+        // Parameter: Level minyak akhir, Biaya Gaji, Biaya Listrik/Gas
+        Task<ProductionBatch> CompleteBatchAsync(Guid batchId, double oilEndLevelLiter, decimal laborCost, decimal utilitiesCost, string username);
+
+        // ==========================================
+        // 2. ANALYTICS & REPORTING
+        // ==========================================
+        Task<List<ProductionBatch>> GetBatchHistoryAsync(DateTime from, DateTime to);
+
+        // Menghitung HPP Teoritis (Ideal) vs Aktual untuk analisa varians
+        Task<decimal> CompareTheoreticalVsActualCostAsync(Guid batchId);
     }
 }

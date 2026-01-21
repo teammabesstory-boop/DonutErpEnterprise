@@ -1,4 +1,4 @@
-﻿using System;
+﻿#nullable enable
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -6,90 +6,95 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DonutErp.Core.Entities;
 using DonutErp.Core.Interfaces.Services;
+using System.Collections.Generic;
 
 namespace DonutErp.UI.ViewModels.Inventory
 {
     public partial class InventoryViewModel : ObservableObject
     {
         private readonly IInventoryService _inventoryService;
+        private List<Ingredient> _allIngredientsCache = new();
 
-        // ==========================================
-        // OBSERVABLE PROPERTIES (STATE UI)
-        // ==========================================
+        // =========================================================
+        // 1. DASHBOARD KPI (Untuk Header UI)
+        // =========================================================
+        [ObservableProperty] private decimal _totalInventoryAssetValue;
+        [ObservableProperty] private int _lowStockItemCount;
 
-        // List Bahan Baku untuk ditampilkan di Tabel
+        // =========================================================
+        // 2. MAIN DATA LISTS
+        // =========================================================
         [ObservableProperty]
         private ObservableCollection<Ingredient> _ingredients = new();
 
-        // Bahan yang sedang dipilih user di tabel
         [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(StockOpnameCommand))] // Update tombol Opname aktif/tidak
-        private Ingredient? _selectedIngredient;
-
-        // Loading Indicator (untuk Spinner)
-        [ObservableProperty]
-        private bool _isLoading;
-
-        // Text pencarian
-        [ObservableProperty]
-        private string _searchText = string.Empty;
-
-        // Statistik Dashboard Kecil di atas Tabel
-        [ObservableProperty]
-        private decimal _totalInventoryAssetValue;
+        private ObservableCollection<Ingredient> _lowStockIngredients = new();
 
         [ObservableProperty]
-        private int _lowStockItemCount;
+        private ObservableCollection<string> _categorySuggestions = new();
 
-        // ==========================================
-        // CONSTRUCTOR (DEPENDENCY INJECTION)
-        // ==========================================
+        // =========================================================
+        // 3. INTERACTION & SELECTION
+        // =========================================================
+        [ObservableProperty]
+        private Ingredient? _selectedIngredient; // Untuk Binding GridView
+
+        [ObservableProperty]
+        private string _searchText = ""; // Untuk Binding TextBox Search
+
+        [ObservableProperty]
+        private bool _isLoading; // XAML minta 'IsLoading', bukan 'IsBusy'
+
+        // =========================================================
+        // 4. FORMS (INPUT & ADJUSTMENT)
+        // =========================================================
+        [ObservableProperty]
+        private Ingredient _newIngredient = new()
+        {
+            Id = System.Guid.Empty,
+            Name = "",
+            Category = "",
+            Sku = "",
+            PurchaseUnit = "",
+            UsageUnit = ""
+        };
+
+        // State untuk Stock Opname / Adjustment
+        [ObservableProperty] private Ingredient? _selectedAdjustmentItem;
+        [ObservableProperty] private double _adjustmentRealStock;
+        [ObservableProperty] private string _adjustmentReason = "";
+
+        // =========================================================
+        // CONSTRUCTOR & LOADER
+        // =========================================================
         public InventoryViewModel(IInventoryService inventoryService)
         {
             _inventoryService = inventoryService;
-
-            // Load data saat ViewModel dibuat (atau bisa dipanggil manual nanti)
             _ = LoadDataAsync();
         }
 
-        // ==========================================
-        // COMMANDS (AKSI USER)
-        // ==========================================
-
-        /// <summary>
-        /// Mengambil data dari Database dan menghitung statistik.
-        /// </summary>
         [RelayCommand]
         public async Task LoadDataAsync()
         {
-            if (IsLoading) return;
-
+            IsLoading = true;
             try
             {
-                IsLoading = true;
+                var list = await _inventoryService.GetAllIngredientsAsync();
+                _allIngredientsCache = list;
+                Ingredients = new ObservableCollection<Ingredient>(list);
 
-                // 1. Ambil Data Mentah dari Service
-                var rawData = await _inventoryService.GetAllIngredientsAsync();
+                // Hitung KPI
+                TotalInventoryAssetValue = list.Sum(x => (decimal)x.CurrentStock * x.AvgCostPerUsageUnit);
 
-                // 2. Filter Pencarian (Client-Side filtering for speed on small data)
-                if (!string.IsNullOrWhiteSpace(SearchText))
-                {
-                    rawData = rawData.Where(i =>
-                        i.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                        i.Sku.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
-                    ).ToList();
-                }
+                var alerts = await _inventoryService.GetLowStockAlertsAsync();
+                LowStockIngredients = new ObservableCollection<Ingredient>(alerts);
+                LowStockItemCount = alerts.Count;
 
-                // 3. Update UI Collection
-                Ingredients = new ObservableCollection<Ingredient>(rawData);
-
-                // 4. Hitung Statistik Real-time
-                CalculateDashboardStats();
-            }
-            catch (Exception ex)
-            {
-                // In God Mode, we assume a Logging Service exists, but for now Debug.
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Load Inventory: {ex.Message}");
+                // Categories
+                var cats = list.Select(x => x.Category)
+                               .Where(c => !string.IsNullOrEmpty(c))
+                               .Distinct().OrderBy(c => c).ToList();
+                CategorySuggestions = new ObservableCollection<string>(cats);
             }
             finally
             {
@@ -97,59 +102,95 @@ namespace DonutErp.UI.ViewModels.Inventory
             }
         }
 
-        /// <summary>
-        /// Melakukan Stock Opname (Penyesuaian Stok)
-        /// Command ini hanya aktif jika ada item yang dipilih (SelectedIngredient != null).
-        /// </summary>
-        [RelayCommand(CanExecute = nameof(CanModifyIngredient))]
-        public async Task StockOpnameAsync(double newRealStock)
-        {
-            if (SelectedIngredient == null) return;
+        // =========================================================
+        // COMMANDS
+        // =========================================================
 
+        [RelayCommand]
+        public void Search(string query)
+        {
+            SearchText = query; // Sync property
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                Ingredients = new ObservableCollection<Ingredient>(_allIngredientsCache);
+            }
+            else
+            {
+                var filtered = _allIngredientsCache
+                    .Where(i => i.Name.Contains(query, System.StringComparison.OrdinalIgnoreCase) ||
+                                i.Sku.Contains(query, System.StringComparison.OrdinalIgnoreCase) ||
+                                i.Category.Contains(query, System.StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                Ingredients = new ObservableCollection<Ingredient>(filtered);
+            }
+        }
+
+        [RelayCommand]
+        public async Task SaveIngredientAsync()
+        {
+            if (string.IsNullOrWhiteSpace(NewIngredient.Name)) return;
+
+            IsLoading = true;
             try
             {
-                IsLoading = true;
+                await _inventoryService.AddOrUpdateIngredientAsync(NewIngredient);
 
-                // Panggil Service untuk logic Opname & Jurnal Akuntansi
-                await _inventoryService.AdjustStockAsync(
-                    SelectedIngredient.Id,
-                    newRealStock,
-                    "Manual Stock Opname via Dashboard");
+                // Reset Form
+                NewIngredient = new Ingredient
+                {
+                    Id = System.Guid.Empty,
+                    Name = "",
+                    Category = "",
+                    Sku = "",
+                    PurchaseUnit = "",
+                    UsageUnit = ""
+                };
 
-                // Refresh data untuk melihat perubahan
                 await LoadDataAsync();
             }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Stock Opname: {ex.Message}");
-            }
             finally
             {
                 IsLoading = false;
             }
         }
 
-        // Validasi tombol: Hanya bisa klik jika ada item terpilih
-        private bool CanModifyIngredient() => SelectedIngredient != null;
-
-        // Trigger pencarian saat user menekan Enter di TextBox
+        // Command Khusus untuk membuka Dialog/Mode Stock Opname (Diminta XAML)
+        // Disini kita simplifikasi: Set item yang dipilih sebagai item yang mau di-adjust
         [RelayCommand]
-        public async Task SearchAsync()
+        public void StockOpname()
         {
-            await LoadDataAsync();
+            if (SelectedIngredient != null)
+            {
+                SelectedAdjustmentItem = SelectedIngredient;
+                AdjustmentRealStock = SelectedIngredient.CurrentStock; // Default value = stok sekarang
+                AdjustmentReason = "Stock Opname Rutin";
+            }
         }
 
-        // ==========================================
-        // HELPER LOGIC
-        // ==========================================
-        private void CalculateDashboardStats()
+        [RelayCommand]
+        public async Task SubmitAdjustmentAsync()
         {
-            // Menghitung Total Aset Uang yang mengendap di Gudang
-            // Rumus: Sum(Stok * Harga Rata-rata)
-            TotalInventoryAssetValue = Ingredients.Sum(i => (decimal)i.CurrentStock * i.AvgCostPerUsageUnit);
+            if (SelectedAdjustmentItem == null || string.IsNullOrWhiteSpace(AdjustmentReason)) return;
 
-            // Hitung item yang perlu belanja ulang
-            LowStockItemCount = Ingredients.Count(i => i.CurrentStock <= i.MinStockLevel);
+            IsLoading = true;
+            try
+            {
+                await _inventoryService.AdjustStockAsync(
+                    SelectedAdjustmentItem.Id,
+                    AdjustmentRealStock,
+                    AdjustmentReason,
+                    "Admin");
+
+                SelectedAdjustmentItem = null;
+                AdjustmentRealStock = 0;
+                AdjustmentReason = "";
+
+                await LoadDataAsync();
+            }
+            finally
+            {
+                IsLoading = false;
+            }
         }
     }
 }

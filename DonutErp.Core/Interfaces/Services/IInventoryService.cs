@@ -7,23 +7,43 @@ namespace DonutErp.Core.Interfaces.Services
 {
     public interface IInventoryService
     {
-        // --- EXISTING ---
+        // ==========================================
+        // 1. BASIC INVENTORY OPERATIONS
+        // ==========================================
         Task<List<Ingredient>> GetAllIngredientsAsync();
+        Task<Ingredient?> GetIngredientByIdAsync(Guid id);
         Task<List<Ingredient>> GetLowStockAlertsAsync();
         Task AddOrUpdateIngredientAsync(Ingredient ingredient);
-        Task AdjustStockAsync(Guid ingredientId, double realStockAmount, string reason);
+
+        // Advanced Stock Adjustment dengan Audit Trail
+        Task AdjustStockAsync(Guid ingredientId, double realStockAmount, string reason, string username);
+
+        // Smart Check: Apakah cukup stok untuk bikin X donat? (Memperhitungkan BOM bertingkat)
         Task<bool> CheckStockAvailabilityAsync(Guid productId, int quantityToMake);
 
-        // --- NEW FEATURES (HPP & RECIPE) ---
-
-        // 1. Ambil Resep untuk Produk tertentu
+        // ==========================================
+        // 2. PRODUCT ENGINEERING (BOM & RECIPE)
+        // ==========================================
+        Task<List<Product>> GetAllProductsAsync();
+        Task<Product?> GetProductByIdAsync(Guid id);
         Task<List<Recipe>> GetRecipeByProductAsync(Guid productId);
-
-        // 2. Update/Tambah Resep (Misal: Ubah takaran tepung)
         Task UpdateRecipeAsync(Guid productId, List<Recipe> newRecipes);
+        Task AddOrUpdateProductAsync(Product product);
 
-        // 3. HITUNG ULANG HPP (Fitur Paling Mahal)
-        // Dipanggil setiap kali harga bahan baku berubah atau resep berubah
+        // ==========================================
+        // 3. THE "BRAIN" (ADVANCED ANALYTICS)
+        // ==========================================
+
+        // Hitung HPP secara Rekursif (Menelusuri Sub-Product sedalam mungkin)
         Task<decimal> RecalculateProductHppAsync(Guid productId);
+
+        // AI Lite: Prediksi kebutuhan stok untuk N hari ke depan berdasarkan history pemakaian
+        Task<double> PredictStockUsageAsync(Guid ingredientId, int daysToPredict);
+
+        // AI Lite: Analisa tren harga supplier (Naik/Turun/Stabil)
+        Task<string> AnalyzePriceTrendAsync(Guid ingredientId);
+
+        // Record History Harga Beli (dipanggil saat Purchase Order)
+        Task RecordPriceHistoryAsync(Guid ingredientId, decimal newPrice, string supplierName);
     }
 }

@@ -1,0 +1,16 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="DonutErp.Core/DonutErp.Core.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="DonutErp.Infrastructure/DonutErp.Infrastructure.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="DonutErp.UI/DonutErp.UI.csproj" Id="95991370-acc0-458d-9041-7018ea00c0d8">
+    <Platform Project="x64" />
+    <Deploy />
+  </Project>
+</Solution>

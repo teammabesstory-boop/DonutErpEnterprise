@@ -1,0 +1,54 @@
+<Window
+    x:Class="DonutErp.UI.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <NavigationView x:Name="NavView" 
+                    PaneDisplayMode="Auto" 
+                    IsSettingsVisible="True"
+                    SelectionChanged="NavView_SelectionChanged"
+                    Loaded="NavView_Loaded">
+
+        <NavigationView.MenuItems>
+            <NavigationViewItem Tag="InventoryPage" Content="Gudang &amp; Stok">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE8F1;"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
+            <NavigationViewItem Tag="ProductionPage" Content="Dapur Produksi">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE9D5;"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
+            <NavigationViewItem Tag="FinancePage" Content="Laporan Keuangan" IsEnabled="False">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE825;"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
+            <NavigationViewItemSeparator/>
+
+            <NavigationViewItem Tag="PosPage" Content="Kasir (POS)" IsEnabled="False">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE719;"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+
+        </NavigationView.MenuItems>
+
+        <NavigationView.PaneFooter>
+            <StackPanel Orientation="Horizontal" Padding="12">
+                <PersonPicture Width="24" DisplayName="Admin" />
+                <TextBlock Text="Administrator" VerticalAlignment="Center" Margin="12,0,0,0" Style="{StaticResource CaptionTextBlockStyle}"/>
+            </StackPanel>
+        </NavigationView.PaneFooter>
+
+        <Frame x:Name="ContentFrame"/>
+
+    </NavigationView>
+</Window>

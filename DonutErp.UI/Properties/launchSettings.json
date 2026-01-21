@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "DonutErp.UI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "DonutErp.UI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

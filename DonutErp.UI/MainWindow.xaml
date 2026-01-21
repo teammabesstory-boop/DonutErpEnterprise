@@ -25,7 +25,7 @@
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
 
-            <NavigationViewItem Tag="FinancePage" Content="Laporan Keuangan" IsEnabled="False">
+            <NavigationViewItem Tag="FinancePage" Content="Laporan Keuangan">
                 <NavigationViewItem.Icon>
                     <FontIcon Glyph="&#xE825;"/>
                 </NavigationViewItem.Icon>
@@ -33,7 +33,7 @@
 
             <NavigationViewItemSeparator/>
 
-            <NavigationViewItem Tag="PosPage" Content="Kasir (POS)" IsEnabled="False">
+            <NavigationViewItem Tag="PosPage" Content="Kasir (POS)">
                 <NavigationViewItem.Icon>
                     <FontIcon Glyph="&#xE719;"/>
                 </NavigationViewItem.Icon>

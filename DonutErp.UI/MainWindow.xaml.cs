@@ -73,16 +73,14 @@ namespace DonutErp.UI
                     _page = typeof(ProductionPage);
                     break;
 
-                    // --- HALAMAN YANG AKAN DATANG (UNCOMMENT SAAT FILE SUDAH DIBUAT) ---
-                    /*
-                    case "FinancePage":
-                        _page = typeof(FinancePage);
-                        break;
+                case "FinancePage":
+                    _page = typeof(FinancePage);
+                    break;
 
-                    case "PosPage":
-                        _page = typeof(PosPage);
-                        break;
-                    */
+                case "PosPage":
+                    _page = typeof(PosPage);
+                    break;
+
             }
 
             // Dapatkan tipe halaman yang sedang aktif sekarang

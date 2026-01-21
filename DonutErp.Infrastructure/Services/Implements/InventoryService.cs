@@ -65,8 +65,6 @@ namespace DonutErp.Infrastructure.Services.Implements
         // =================================================================
         // 3. STOCK OPNAME (PENYESUAIAN STOK)
         // =================================================================
-        // Fitur ini digunakan saat fisik gudang beda dengan sistem (misal: pecah, hilang, bonus).
-        // Kita tidak hanya ubah angka, tapi catat ADJUSTMENT TRANSACTION di keuangan.
         public async Task AdjustStockAsync(Guid ingredientId, double realStockAmount, string reason)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -87,20 +85,22 @@ namespace DonutErp.Infrastructure.Services.Implements
                 _context.Ingredients.Update(ingredient);
 
                 // 2. Catat Log Keuangan (Adjustment)
-                // Jika Stok Fisik LEBIH BANYAK dari Sistem (Diff Positif) -> Keuntungan (Inventory Gain)
-                // Jika Stok Fisik LEBIH DIKIT dari Sistem (Diff Negatif) -> Kerugian (Inventory Loss/Shrinkage)
-
                 decimal adjustmentValue = (decimal)diff * ingredient.AvgCostPerUsageUnit;
 
                 var adjustmentLog = new Transaction
                 {
                     Id = Guid.NewGuid(),
+                    // FIXED: InvoiceNumber hanya satu kali deklarasi
                     InvoiceNumber = $"ADJ-{DateTime.Now:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 4).ToUpper()}",
+
                     Date = DateTime.Now,
-                    Type = TransactionType.Adjustment,
+                    Type = TransactionType.StockAdjustment,
+
                     Notes = $"Stock Opname: {ingredient.Name}. {reason}",
                     TotalAmount = adjustmentValue, // Bisa minus (Rugi) atau plus (Untung)
-                    TotalCost = 0
+                    TotalCost = 0,
+
+                    Description = "Stock Opname Adjustment"
                 };
 
                 await _context.Transactions.AddAsync(adjustmentLog);
@@ -120,20 +120,19 @@ namespace DonutErp.Infrastructure.Services.Implements
         // =================================================================
         public async Task<bool> CheckStockAvailabilityAsync(Guid productId, int quantityToMake)
         {
-            // Ambil Resep Produk
-            var recipeItems = await _context.RecipeItems
+            var recipes = await _context.Recipes
                 .Where(r => r.ProductId == productId)
                 .ToListAsync();
 
-            if (!recipeItems.Any()) return true; // Gak pake bahan apa-apa? Aman.
+            if (!recipes.Any()) return true; // Gak pake bahan apa-apa? Aman.
 
-            foreach (var item in recipeItems)
+            foreach (var item in recipes)
             {
                 // Cek Stok Gudang
                 var ingredient = await _context.Ingredients.FindAsync(item.IngredientId);
                 if (ingredient == null) continue;
 
-                double needed = item.Amount * quantityToMake;
+                double needed = item.Quantity * quantityToMake;
 
                 if (ingredient.CurrentStock < needed)
                 {

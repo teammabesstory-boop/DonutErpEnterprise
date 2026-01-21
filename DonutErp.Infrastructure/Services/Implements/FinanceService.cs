@@ -37,10 +37,8 @@ namespace DonutErp.Infrastructure.Services.Implements
                     if (product == null) continue;
 
                     // --- PROFIT LOCKING MECHANISM ---
-                    // Kita simpan HPP saat ini ke dalam tabel transaksi.
-                    // Agar laporan profit bulan lalu tidak berubah meski harga bahan naik bulan depan.
                     detail.CostAtSale = product.CachedHpp;
-                    detail.PriceAtSale = product.SellingPrice; // Pastikan harga sesuai database master (atau override dari UI)
+                    detail.PriceAtSale = product.SellingPrice;
 
                     // Hitung total COGS (HPP) transaksi ini
                     totalTransactionCost += (detail.CostAtSale * detail.Quantity);
@@ -68,7 +66,6 @@ namespace DonutErp.Infrastructure.Services.Implements
         // =================================================================
         // 2. RECORD EXPENSE (PENGELUARAN OPERASIONAL)
         // =================================================================
-        // Contoh: Bayar Listrik, Gaji Karyawan, Beli Gas (Non-Inventory)
         public async Task RecordExpenseAsync(string description, decimal amount, DateTime date)
         {
             var expense = new Transaction
@@ -99,34 +96,32 @@ namespace DonutErp.Infrastructure.Services.Implements
                 .ToListAsync();
 
             // A. REVENUE (OMZET KOTOR)
-            // Uang masuk dari penjualan + Adjustment stok positif
             decimal revenue = transactions
                 .Where(t => t.Type == TransactionType.SalesIncome)
                 .Sum(t => t.TotalAmount);
 
             // Tambah inventory gain (jika ada stock opname surplus)
+            // PERBAIKAN: Ganti Adjustment -> StockAdjustment
             decimal inventoryGain = transactions
-                .Where(t => t.Type == TransactionType.Adjustment && t.TotalAmount > 0)
+                .Where(t => t.Type == TransactionType.StockAdjustment && t.TotalAmount > 0)
                 .Sum(t => t.TotalAmount);
 
             // B. COGS (HARGA POKOK PENJUALAN)
-            // Modal dari barang yang terjual
             decimal cogs = transactions
                 .Where(t => t.Type == TransactionType.SalesIncome)
                 .Sum(t => t.TotalCost);
 
             // C. EXPENSES (BEBAN OPERASIONAL)
-            // Listrik, Gaji, dll + Adjustment stok minus (hilang/rusak)
             decimal opex = transactions
                 .Where(t => t.Type == TransactionType.OperationalExpense)
                 .Sum(t => t.TotalAmount);
 
+            // PERBAIKAN: Ganti Adjustment -> StockAdjustment
             decimal inventoryLoss = transactions
-                .Where(t => t.Type == TransactionType.Adjustment && t.TotalAmount < 0)
+                .Where(t => t.Type == TransactionType.StockAdjustment && t.TotalAmount < 0)
                 .Sum(t => Math.Abs(t.TotalAmount));
 
             // D. NET PROFIT (LABA BERSIH)
-            // Rumus: (Revenue + Gain) - COGS - (Opex + Loss)
             decimal totalRevenueFinal = revenue + inventoryGain;
             decimal totalExpenseFinal = cogs + opex + inventoryLoss;
             decimal netProfit = totalRevenueFinal - totalExpenseFinal;
@@ -139,10 +134,9 @@ namespace DonutErp.Infrastructure.Services.Implements
         // =================================================================
         public async Task<List<(string ProductName, int QtySold)>> GetTopSellingProductsAsync(int topN)
         {
-            // Query Agregasi Kompleks
             var topProducts = await _context.TransactionDetails
                 .Include(d => d.Transaction)
-                .Where(d => d.Transaction!.Type == TransactionType.SalesIncome) // Hanya hitung penjualan
+                .Where(d => d.Transaction!.Type == TransactionType.SalesIncome)
                 .GroupBy(d => d.ProductId)
                 .Select(g => new
                 {
@@ -153,8 +147,6 @@ namespace DonutErp.Infrastructure.Services.Implements
                 .Take(topN)
                 .ToListAsync();
 
-            // Fetch Nama Produk (Client side join untuk performa jika data produk sedikit)
-            // atau bisa include di atas. Kita ambil nama manual biar aman.
             var result = new List<(string, int)>();
             foreach (var item in topProducts)
             {

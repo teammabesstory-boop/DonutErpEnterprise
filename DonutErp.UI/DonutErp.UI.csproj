@@ -18,10 +18,6 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <Page Remove="Views\Pages\ProductionPage.xaml" />
-	</ItemGroup>
-
-	<ItemGroup>
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.0-experimental4" />
 		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.1-RTM" />
@@ -33,12 +29,6 @@
 	<ItemGroup>
 		<ProjectReference Include="..\DonutErp.Core\DonutErp.Core.csproj" />
 		<ProjectReference Include="..\DonutErp.Infrastructure\DonutErp.Infrastructure.csproj" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <None Update="Views\Pages\ProductionPage.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </None>
 	</ItemGroup>
 
 </Project>

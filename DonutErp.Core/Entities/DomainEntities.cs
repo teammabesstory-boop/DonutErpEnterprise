@@ -29,10 +29,10 @@ namespace DonutErp.Core.Entities
         public required string Sku { get; set; }
 
         [Required, MaxLength(20)]
-        public required string PurchaseUnit { get; set; } // e.g. Sak, Karton
+        public required string PurchaseUnit { get; set; }
 
         [Required, MaxLength(20)]
-        public required string UsageUnit { get; set; }    // e.g. Gram, Ml
+        public required string UsageUnit { get; set; }
 
         public double ConversionRatio { get; set; } = 1.0;
 
@@ -62,25 +62,26 @@ namespace DonutErp.Core.Entities
         [Required]
         public required string Name { get; set; }
 
+        // --- INI YANG HILANG TADI ---
+        [Required]
+        public required string Sku { get; set; }
+        // ----------------------------
+
         public string? Description { get; set; }
         public ProductType Type { get; set; }
 
         [Column(TypeName = "decimal(18, 2)")]
         public decimal SellingPrice { get; set; }
 
-        // Cache HPP (Biar UI ringan)
         [NotMapped]
         public decimal CachedHpp { get; set; }
 
-        // Logic Geometri (Buat Glaze) - Kita pertahankan karena canggih
         public double DiameterCm { get; set; }
         public double InnerHoleDiameterCm { get; set; }
 
-        // --- PERBAIKAN PENTING: Ganti RecipeItems jadi Recipes ---
         public virtual ICollection<Recipe> Recipes { get; set; } = new List<Recipe>();
     }
 
-    // --- PERBAIKAN PENTING: Rename class jadi Recipe ---
     [Table("Recipes")]
     public class Recipe
     {
@@ -95,7 +96,6 @@ namespace DonutErp.Core.Entities
         [ForeignKey("IngredientId")]
         public virtual Ingredient? Ingredient { get; set; }
 
-        // --- PERBAIKAN PENTING: Ganti Amount jadi Quantity (Sesuai Service) ---
         public double Quantity { get; set; }
 
         public double WastePercentage { get; set; } = 0;
@@ -121,7 +121,6 @@ namespace DonutErp.Core.Entities
         public double OilLevelEndLiter { get; set; }
         public double OilAddedLiter { get; set; }
 
-        // Hasil Hitungan (Sudah ada di kode lama lo, mantap)
         public double OilConsumedLiters { get; set; }
 
         [Column(TypeName = "decimal(18, 2)")]
@@ -171,7 +170,6 @@ namespace DonutErp.Core.Entities
         public DateTime Date { get; set; } = DateTime.Now;
         public TransactionType Type { get; set; }
 
-        // Sudah ada, mantap
         public string Description { get; set; } = string.Empty;
 
         [Column(TypeName = "decimal(18, 2)")]

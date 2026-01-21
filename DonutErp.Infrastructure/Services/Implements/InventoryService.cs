@@ -19,93 +19,70 @@ namespace DonutErp.Infrastructure.Services.Implements
             _context = context;
         }
 
-        // =================================================================
-        // 1. DATA RETRIEVAL (GET)
-        // =================================================================
-
         public async Task<List<Ingredient>> GetAllIngredientsAsync()
         {
-            // Mengambil semua bahan baku, diurutkan dari yang stoknya paling tipis
             return await _context.Ingredients
                 .OrderBy(i => i.CurrentStock)
-                .AsNoTracking() // Performance Optimization: Read-only query lebih cepat
+                .AsNoTracking()
                 .ToListAsync();
         }
 
         public async Task<List<Ingredient>> GetLowStockAlertsAsync()
         {
-            // Filter bahan yang stoknya <= Minimum Level
             return await _context.Ingredients
                 .Where(i => i.CurrentStock <= i.MinStockLevel)
                 .AsNoTracking()
                 .ToListAsync();
         }
 
-        // =================================================================
-        // 2. MODIFICATION (ADD/EDIT)
-        // =================================================================
-
         public async Task AddOrUpdateIngredientAsync(Ingredient ingredient)
         {
             if (ingredient.Id == Guid.Empty)
             {
-                // New Ingredient
                 ingredient.Id = Guid.NewGuid();
                 await _context.Ingredients.AddAsync(ingredient);
             }
             else
             {
-                // Update Existing
                 _context.Ingredients.Update(ingredient);
             }
 
+            // PENTING: Jika harga bahan berubah, HPP produk yang pakai bahan ini harus diupdate!
+            // Tapi untuk sekarang kita simpan dulu biar gak berat.
             await _context.SaveChangesAsync();
         }
 
-        // =================================================================
-        // 3. STOCK OPNAME (PENYESUAIAN STOK)
-        // =================================================================
         public async Task AdjustStockAsync(Guid ingredientId, double realStockAmount, string reason)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
-
             try
             {
                 var ingredient = await _context.Ingredients.FindAsync(ingredientId);
                 if (ingredient == null) throw new Exception("Ingredient not found");
 
-                double oldStock = ingredient.CurrentStock;
-                double diff = realStockAmount - oldStock; // Selisih (+ atau -)
+                double diff = realStockAmount - ingredient.CurrentStock;
+                if (diff == 0) return;
 
-                if (diff == 0) return; // Tidak ada perubahan
-
-                // 1. Update Stok Master
+                // Update Master Data
                 ingredient.CurrentStock = realStockAmount;
                 ingredient.UpdatedAt = DateTime.Now;
                 _context.Ingredients.Update(ingredient);
 
-                // 2. Catat Log Keuangan (Adjustment)
-                decimal adjustmentValue = (decimal)diff * ingredient.AvgCostPerUsageUnit;
-
+                // Catat History
                 var adjustmentLog = new Transaction
                 {
                     Id = Guid.NewGuid(),
-                    // FIXED: InvoiceNumber hanya satu kali deklarasi
-                    InvoiceNumber = $"ADJ-{DateTime.Now:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 4).ToUpper()}",
-
+                    InvoiceNumber = $"ADJ-{DateTime.Now:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 4)}",
                     Date = DateTime.Now,
                     Type = TransactionType.StockAdjustment,
-
-                    Notes = $"Stock Opname: {ingredient.Name}. {reason}",
-                    TotalAmount = adjustmentValue, // Bisa minus (Rugi) atau plus (Untung)
-                    TotalCost = 0,
-
-                    Description = "Stock Opname Adjustment"
+                    Description = $"Stock Opname: {ingredient.Name}",
+                    Notes = reason,
+                    TotalAmount = (decimal)diff * ingredient.AvgCostPerUsageUnit,
+                    TotalCost = 0
                 };
 
                 await _context.Transactions.AddAsync(adjustmentLog);
                 await _context.SaveChangesAsync();
-
                 await transaction.CommitAsync();
             }
             catch
@@ -115,32 +92,87 @@ namespace DonutErp.Infrastructure.Services.Implements
             }
         }
 
-        // =================================================================
-        // 4. VALIDASI KETERSEDIAAN RESEP
-        // =================================================================
         public async Task<bool> CheckStockAvailabilityAsync(Guid productId, int quantityToMake)
         {
             var recipes = await _context.Recipes
                 .Where(r => r.ProductId == productId)
                 .ToListAsync();
 
-            if (!recipes.Any()) return true; // Gak pake bahan apa-apa? Aman.
+            if (!recipes.Any()) return true;
 
             foreach (var item in recipes)
             {
-                // Cek Stok Gudang
                 var ingredient = await _context.Ingredients.FindAsync(item.IngredientId);
                 if (ingredient == null) continue;
 
                 double needed = item.Quantity * quantityToMake;
+                if (ingredient.CurrentStock < needed) return false;
+            }
+            return true;
+        }
 
-                if (ingredient.CurrentStock < needed)
+        // ==========================================================
+        // FITUR BARU: MANAJEMEN RESEP & HPP REAL
+        // ==========================================================
+
+        public async Task<List<Recipe>> GetRecipeByProductAsync(Guid productId)
+        {
+            return await _context.Recipes
+                .Include(r => r.Ingredient) // Join ke tabel Ingredient
+                .Where(r => r.ProductId == productId)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+
+        public async Task UpdateRecipeAsync(Guid productId, List<Recipe> newRecipes)
+        {
+            // 1. Hapus resep lama
+            var oldRecipes = await _context.Recipes.Where(r => r.ProductId == productId).ToListAsync();
+            _context.Recipes.RemoveRange(oldRecipes);
+
+            // 2. Masukkan resep baru
+            foreach (var item in newRecipes)
+            {
+                item.Id = Guid.NewGuid();
+                item.ProductId = productId;
+                // Pastikan IngredientId valid
+            }
+            await _context.Recipes.AddRangeAsync(newRecipes);
+            await _context.SaveChangesAsync();
+
+            // 3. Auto-Calculate HPP Baru
+            await RecalculateProductHppAsync(productId);
+        }
+
+        public async Task<decimal> RecalculateProductHppAsync(Guid productId)
+        {
+            // Logic: HPP = Sum(Qty * AvgCostPerUnit)
+            var recipes = await _context.Recipes
+                .Include(r => r.Ingredient)
+                .Where(r => r.ProductId == productId)
+                .ToListAsync();
+
+            decimal newHpp = 0;
+
+            foreach (var r in recipes)
+            {
+                if (r.Ingredient != null)
                 {
-                    return false; // Ada satu bahan aja gak cukup, batal.
+                    // Rumus: Pemakaian x Harga Rata-rata Bahan
+                    newHpp += (decimal)r.Quantity * r.Ingredient.AvgCostPerUsageUnit;
                 }
             }
 
-            return true;
+            // Simpan HPP baru ke Master Produk
+            var product = await _context.Products.FindAsync(productId);
+            if (product != null)
+            {
+                product.CachedHpp = newHpp;
+                _context.Products.Update(product);
+                await _context.SaveChangesAsync();
+            }
+
+            return newHpp;
         }
     }
 }
